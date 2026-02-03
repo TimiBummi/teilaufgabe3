@@ -15,6 +15,7 @@ class Analyzer:
         self.order_df = df.copy()
         self.client_dict: Dict[str, Dict] = {}
         self.bad_orders = None
+        self.best_orders = None
 
         self._prepare_columns()
 
@@ -270,3 +271,75 @@ class Analyzer:
             "- Some orders may still be strategic or contractual.\n"
         )
 
+    def choose_orders(self, max_hours: float = 800):
+        """
+        Greedy selection of orders to maximize total contribution margin per hour
+        while keeping total processing time <= max_hours.
+        Stores selected orders in self.best_orders.
+        """
+        df = self.order_df.copy()
+
+        # Compute margin per hour if not already present
+        if "margin_per_hour" not in df.columns:
+            df["margin_per_hour"] = df["contribution_margin"] / df["processing_time_hr"]
+
+        # Sort by margin per hour descending
+        df_sorted = df.sort_values("margin_per_hour", ascending=False).copy()
+
+        selected_orders = []
+        total_hours = 0.0
+
+        for _, row in df_sorted.iterrows():
+            if total_hours + row["processing_time_hr"] <= max_hours:
+                selected_orders.append(row)
+                total_hours += row["processing_time_hr"]
+
+        # Store the result as a DataFrame
+        self.best_orders = pd.DataFrame(selected_orders)
+
+        print(
+            f"Selected {len(self.best_orders)} orders using greedy heuristic "
+            f"(total hours = {total_hours:.2f})"
+        )
+
+    def print_best_orders(self):
+        """
+        Print the selected orders for a shift (stored in self.best_orders),
+        with total hours, total contribution margin, and per-order details.
+        """
+        if not hasattr(self, "best_orders") or self.best_orders is None or self.best_orders.empty:
+            print("No orders selected for the shift.")
+            return
+
+        df = self.best_orders
+
+        total_hours = df["processing_time_hr"].sum()
+        total_margin = df["contribution_margin"].sum()
+        avg_margin_per_hour = (df["margin_per_hour"].mean()
+                               if "margin_per_hour" in df.columns else None)
+
+        print("\n=== Selected Orders for Shift ===\n")
+        print(f"Total processing time: {total_hours:.2f} hours")
+        print(f"Total contribution margin: {total_margin:.2f}")
+        if avg_margin_per_hour is not None:
+            print(f"Average margin per hour: {avg_margin_per_hour:.2f}\n")
+
+        cols = [
+            "customer_id",
+            "order_id",
+            "processing_time_hr",
+            "contribution_margin",
+            "margin_per_hour",
+            "risk (in percent)",
+        ]
+
+        print(df[cols].to_string(index=False))
+
+        print(
+            "\nNotes:\n"
+            "- Orders selected to maximize contribution margin within shift hours.\n"
+            "- Greedy heuristic: highest margin per hour first.\n"
+            "- This is fast and practical, but may not always be optimal (classic 0/1 knapsack limitation).\n"
+            "- Risk is not considered in this selection.\n"
+            "- For very short shifts or small order sets, exact DP or FPTAS may improve total margin.\n"
+        )

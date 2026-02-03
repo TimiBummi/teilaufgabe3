@@ -23,5 +23,9 @@ def main():
     analyzer.analyze_orders()
     analyzer.print_bad_orders()
 
+    # Teilaufgabe 4 (mit 800h)
+    analyzer.choose_orders()
+    analyzer.print_best_orders()
+
 if __name__ == "__main__":
     main()
